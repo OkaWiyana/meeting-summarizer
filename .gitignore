@@ -1,0 +1,60 @@
+# ============================================================
+# .gitignore - Meeting Summarizer Project
+# ============================================================
+
+# --- Model weights (file besar, jangan di-push ke GitHub) ---
+models/
+*.bin
+*.pt
+*.pth
+*.safetensors
+*.ckpt
+
+# --- Dataset mentah & file media besar ---
+dataset/01_raw/video_mp4/*.mp4
+dataset/01_raw/audio_mp3/*.mp3
+dataset/01_raw/audio_wav/*.wav
+dataset/01_raw/risalah_pdf/*.pdf
+
+# --- File upload & output sementara web ---
+data/temp_uploads/
+data/outputs/
+
+# --- Hasil ekstraksi (bisa di-generate ulang) ---
+dataset/02_extracted/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --- Virtual environment ---
+venv/
+env/
+.env
+.venv
+ENV/
+
+# --- Jupyter Notebook checkpoints ---
+.ipynb_checkpoints/
+
+# --- IDE & OS ---
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Secrets ---
+*.env
+secrets.toml

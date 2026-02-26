@@ -1,0 +1,4 @@
+source,target,format_input
+"Transkripsi rapat uji dari file MP4 yang sudah diekstrak.","Ringkasan rapat uji.","mp4"
+"Transkripsi rapat uji dari file MP3.","Ringkasan rapat uji MP3.","mp3"
+"Transkripsi rapat uji dari file WAV.","Ringkasan rapat uji WAV.","wav"
