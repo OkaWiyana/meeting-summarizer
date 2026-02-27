@@ -16,7 +16,8 @@ import torch
 
 # ── Konfigurasi sistem (tidak diubah oleh pengguna) ─────────
 MODEL_LOCAL_PATH   = Path("models/indot5_finetuned")
-MODEL_HUB_FALLBACK = "panggi/indo-t5-base"  # Ganti sesuai model IndoT5 yang digunakan
+# Model T5 pre-trained untuk Bahasa Indonesia
+MODEL_HUB_FALLBACK = "Wikidepia/IndoT5-base"
 
 # Batas token input maksimal untuk IndoT5 (sesuai arsitektur model)
 MAX_INPUT_TOKENS  = 512   # token per chunk yang disuapkan ke model
