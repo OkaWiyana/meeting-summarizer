@@ -22,7 +22,7 @@ MODEL_HUB_FALLBACK = "Wikidepia/IndoT5-base"
 # Batas token input maksimal untuk IndoT5 (sesuai arsitektur model)
 MAX_INPUT_TOKENS  = 512   # token per chunk yang disuapkan ke model
 # Panjang ringkasan per chunk (ditentukan sistem)
-MAX_NEW_TOKENS    = 150
+MAX_NEW_TOKENS    = 512
 MIN_NEW_TOKENS    = 20
 NUM_BEAMS         = 4
 PREFIX_TASK       = "ringkas: "
