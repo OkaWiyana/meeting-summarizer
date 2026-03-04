@@ -3,7 +3,7 @@ Auto-Summarizer untuk Dataset Anotasi DPR
 ==========================================
 Cara pakai:
   1. pip install google-genai pandas
-  2. Pastikan API key sudah diisi
+  2. Pastikan API key sudah diisi di env
   3. Jalankan: python auto_summarize.py
 """
 
@@ -26,7 +26,7 @@ MODEL_NAME          = "gemini-2.5-flash"
 PATH_CSV = Path(r"D:\Skripsi\meeting-summarizer\dataset\data_segment_siap_anotasi.csv")
 DIR_OCR  = Path(r"D:\Skripsi\meeting-summarizer\dataset\02_extracted\ocr_risalah")
 
-DELAY_ANTAR_REQUEST = 4   # 4 detik → aman untuk limit 20 req/menit
+DELAY_ANTAR_REQUEST = 4
 SIMPAN_TIAP_N_BARIS = 10
 # ─────────────────────────────────────────
 
