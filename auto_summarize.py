@@ -7,16 +7,20 @@ Cara pakai:
   3. Jalankan: python auto_summarize.py
 """
 
+import os
 import pandas as pd
 from google import genai
 import time
 import re
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ─────────────────────────────────────────
 # KONFIGURASI
 # ─────────────────────────────────────────
-GEMINI_API_KEY      = "AIzaSyDtZNMHUx26tWnirFL6eagDwWYT8kvaYpI"
+GEMINI_API_KEY      = os.environ["GEMINI_API_KEY"]
 MODEL_NAME          = "gemini-2.5-flash"
 
 PATH_CSV = Path(r"D:\Skripsi\meeting-summarizer\dataset\data_segment_siap_anotasi.csv")
