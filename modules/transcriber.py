@@ -19,7 +19,7 @@ import whisper
 # Model Whisper yang digunakan: tiny | base | small | medium | large-v3
 # 'small' direkomendasikan untuk keseimbangan kecepatan & akurasi di CPU.
 # Ganti ke 'medium' jika menggunakan GPU.
-WHISPER_MODEL    = "small"
+WHISPER_MODEL    = "medium"
 WHISPER_LANGUAGE = "id"   # Bahasa Indonesia
 
 # ── Cache model ───────────────────────────────────────────────

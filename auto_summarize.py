@@ -2,14 +2,20 @@
 Auto-Summarizer untuk Dataset Anotasi DPR
 ==========================================
 Cara pakai:
-  1. pip install google-genai pandas
-  2. Pastikan API key sudah diisi di env
-  3. Jalankan: python auto_summarize.py
+  1. pip install openai pandas python-dotenv rapidfuzz
+  2. Daftar di https://console.groq.com → ambil API key gratis
+  3. Isi key di file .env seperti ini:
+       GROQ_KEY_1=gsk_xxxx
+       GROQ_KEY_2=gsk_xxxx
+       GROQ_KEY_3=gsk_xxxx
+       dst...
+  4. Jalankan: python auto_summarize.py
 """
 
 import os
 import pandas as pd
-from google import genai
+from openai import OpenAI
+from rapidfuzz import fuzz
 import time
 import re
 from pathlib import Path
@@ -20,22 +26,126 @@ load_dotenv()
 # ─────────────────────────────────────────
 # KONFIGURASI
 # ─────────────────────────────────────────
-GEMINI_API_KEY      = os.environ["GEMINI_API_KEY"]
-MODEL_NAME          = "gemini-2.5-flash"
+# Baca semua key dari .env secara otomatis (GROQ_KEY_1, GROQ_KEY_2, dst)
+API_KEYS = sorted([
+    v for k, v in os.environ.items()
+    if k.startswith("GROQ_KEY_") and v.strip()
+])
 
-PATH_CSV = Path(r"D:\Skripsi\meeting-summarizer\dataset\data_segment_siap_anotasi.csv")
-DIR_OCR  = Path(r"D:\Skripsi\meeting-summarizer\dataset\02_extracted\ocr_risalah")
-
-DELAY_ANTAR_REQUEST = 4
+MODEL_NAME          = "llama-3.3-70b-versatile"
+PATH_CSV            = Path(r"D:\Skripsi\meeting-summarizer\dataset\data_segment_siap_anotasi.csv")
+DIR_OCR             = Path(r"D:\Skripsi\meeting-summarizer\dataset\02_extracted\ocr_risalah")
+DELAY_ANTAR_REQUEST = 5
 SIMPAN_TIAP_N_BARIS = 10
+MAKS_KATA_OCR       = 500
 # ─────────────────────────────────────────
 
 
+class GroqClientPool:
+    """Kelola banyak API key Groq, otomatis pindah kalau satu key habis TPD."""
+
+    def __init__(self, api_keys: list):
+        if not api_keys:
+            raise ValueError("Tidak ada API key! Pastikan .env sudah diisi dengan GROQ_KEY_1, GROQ_KEY_2, dst.")
+        self.keys   = api_keys
+        self.index  = 0
+        self.client = self._buat_client(self.keys[0])
+        print(f"✓ {len(self.keys)} API key dimuat")
+        print(f"  → Menggunakan key #{self.index + 1}")
+
+    def _buat_client(self, api_key: str) -> OpenAI:
+        return OpenAI(
+            base_url="https://api.groq.com/openai/v1",
+            api_key=api_key,
+        )
+
+    def next_key(self):
+        self.index += 1
+        if self.index >= len(self.keys):
+            raise RuntimeError(
+                f"🚫 Semua {len(self.keys)} API key sudah habis kuota hariannya!\n"
+                f"   Tambah key baru di .env atau tunggu besok untuk reset kuota."
+            )
+        self.client = self._buat_client(self.keys[self.index])
+        print(f"🔑 Pindah ke API key #{self.index + 1} dari {len(self.keys)}")
+
+    def generate(self, prompt: str) -> str:
+        maks_retry = 5
+        for percobaan in range(maks_retry):
+            try:
+                response = self.client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.3,
+                )
+                return response.choices[0].message.content.strip()
+
+            except Exception as e:
+                pesan = str(e)
+
+                if "429" in pesan or "rate" in pesan.lower():
+                    # Cek apakah ini limit harian (TPD) atau per menit (TPM)
+                    if "day" in pesan.lower() or "quota" in pesan.lower():
+                        print(f"  ⚠  Key #{self.index + 1} habis kuota harian, pindah key...")
+                        self.next_key()
+                    else:
+                        cocok = re.search(r'Please try again in ([\d.]+)s', pesan)
+                        tunggu = float(cocok.group(1)) + 2 if cocok else 60
+                        print(f"  ⏳ Rate limit! Tunggu {tunggu:.0f} detik... (percobaan {percobaan+1}/{maks_retry})")
+                        time.sleep(tunggu)
+
+                elif "401" in pesan or "invalid" in pesan.lower():
+                    print(f"  ⚠  Key #{self.index + 1} tidak valid, pindah key...")
+                    self.next_key()
+
+                else:
+                    print(f"  ✗ Error Groq: {e}")
+                    return f"[ERROR: {e}]"
+
+        return "[ERROR: Melebihi batas retry]"
+
+
+def ambil_ocr_relevan(transkrip: str, referensi_ocr: str, maks_kata: int = 500) -> str:
+    """Ambil paragraf OCR yang paling relevan dengan transkrip."""
+    paragraf = [p.strip() for p in referensi_ocr.split('\n') if len(p.strip()) > 20]
+
+    if not paragraf:
+        return " ".join(referensi_ocr.split()[:maks_kata])
+
+    sample = " ".join(transkrip.split()[:50])
+
+    scored = [(fuzz.token_set_ratio(sample, p), p) for p in paragraf]
+    scored.sort(reverse=True)
+
+    hasil, total_kata = [], 0
+    for _, p in scored:
+        kata = p.split()
+        if total_kata + len(kata) > maks_kata:
+            break
+        hasil.append(p)
+        total_kata += len(kata)
+
+    return " ".join(hasil) if hasil else " ".join(referensi_ocr.split()[:maks_kata])
+
+
 def buat_prompt(transkrip: str, referensi_ocr: str) -> str:
-    return f"""Kamu adalah Asisten Peneliti NLP. 
-Tugasmu: Buatkan ringkasan formal. Panjangnya sesuaikan dengan kepadatan informasi (kisaran 50-90 kata). Yang penting semua poin keputusan/argumen utama tidak hilang dari [TRANSKRIP LISAN] di bawah ini.
-Carilah konteks pembahasannya di dalam [REFERENSI RISALAH UTUH] agar ringkasanmu sesuai fakta dan menggunakan gaya bahasa formal khas Risalah DPR.
+    return f"""Kamu adalah Asisten Peneliti NLP yang bertugas membuat data training untuk model summarization IndoT5.
+
+TUGAS: Buat ringkasan formal dari [TRANSKRIP LISAN] di bawah ini.
+
+ATURAN WAJIB:
+1. Panjang MAKSIMAL 4 kalimat, 50-70 kata — TIDAK BOLEH lebih
+2. Langsung ke inti — TIDAK perlu sebut "Dewan Perwakilan Rakyat (DPR)" panjang-panjang, cukup "DPR RI" atau "Rapat Paripurna"
+3. Gaya bahasa: singkat, padat, formal khas Risalah DPR — mirip berita resmi, bukan esai
+4. Gunakan [REFERENSI RISALAH UTUH] HANYA untuk koreksi ejaan/nama, bukan tambah fakta baru
+5. Sertakan angka/keputusan penting jika ada
+6. JANGAN kembangkan singkatan yang tidak dijelaskan di transkrip — tulis apa adanya (BKN tetap BKN)
+7. JANGAN ubah framing kejadian — jika anggota DPR menyampaikan aspirasi, tulis "Anggota DPR menyampaikan..." bukan "Rapat Paripurna menerima..."
+8. JANGAN mengarang angka atau fakta yang tidak ada di transkrip
 PENTING: Hanya berikan hasil ringkasannya saja, tanpa basa-basi atau kalimat pengantar apapun!
+
+Contoh gaya yang BENAR (50-70 kata):
+Rapat Paripurna DPR RI menyetujui RUU Undang-undang dan menyampaikan kebijakan negara pada Masa Persidangan II Tahun Sidang 2025-2026. Kebijakan pemerintah akan memberikan ruang untuk kesejahteraan rakyat serta menjaga keseimbangan ekonomi dan keuangan. Pemerintah juga mengapresiasi kinerja aparatur negara selama masa reses.
 
 [TRANSKRIP LISAN]:
 {transkrip}
@@ -44,59 +154,34 @@ PENTING: Hanya berikan hasil ringkasannya saja, tanpa basa-basi atau kalimat pen
 {referensi_ocr}"""
 
 
-def ringkas_satu_baris(client, transkrip: str, dokumen_asal: str) -> str:
+def ringkas_satu_baris(pool: GroqClientPool, transkrip: str, dokumen_asal: str) -> str:
     ocr_file = DIR_OCR / (dokumen_asal + ".txt")
 
     if ocr_file.exists():
-        referensi_ocr = ocr_file.read_text(encoding="utf-8").strip()
+        referensi_ocr_full = ocr_file.read_text(encoding="utf-8").strip()
+        referensi_ocr = ambil_ocr_relevan(transkrip, referensi_ocr_full, MAKS_KATA_OCR)
     else:
         print(f"  ⚠  OCR tidak ditemukan untuk '{dokumen_asal}', referensi dikosongkan.")
         referensi_ocr = "(Referensi tidak tersedia)"
 
     prompt = buat_prompt(transkrip, referensi_ocr)
-
-    maks_retry = 5
-    for percobaan in range(maks_retry):
-        try:
-            response = client.models.generate_content(
-                model=MODEL_NAME,
-                contents=prompt
-            )
-            return response.text.strip()
-
-        except Exception as e:
-            pesan = str(e)
-
-            if "429" in pesan:
-                # Baca retryDelay dari pesan error Gemini, lalu tunggu
-                cocok = re.search(r'retryDelay.*?(\d+)s', pesan)
-                tunggu = int(cocok.group(1)) + 5 if cocok else 65
-                print(f"  ⏳ Rate limit! Tunggu {tunggu} detik... (percobaan {percobaan+1}/{maks_retry})")
-                time.sleep(tunggu)
-
-            elif "400" in pesan and "expired" in pesan:
-                print("  ✗ API key expired! Perbarui key di aistudio.google.com lalu jalankan ulang.")
-                raise
-
-            else:
-                print(f"  ✗ Error Gemini: {e}")
-                return f"[ERROR: {e}]"
-
-    return "[ERROR: Melebihi batas retry]"
+    return pool.generate(prompt)
 
 
 def main():
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    pool = GroqClientPool(API_KEYS)
     print(f"✓ Model siap: {MODEL_NAME}")
 
     df = pd.read_csv(PATH_CSV, encoding="utf-8", encoding_errors="replace")
     total = len(df)
     print(f"✓ CSV dimuat: {total} segmen")
 
-    # Konversi ke string dulu (kolom kosong dibaca pandas sebagai float NaN)
+    if "target_summary_manual" not in df.columns:
+        df["target_summary_manual"] = ""
+        print("  ℹ  Kolom 'target_summary_manual' dibuat baru.")
+
     df["target_summary_manual"] = df["target_summary_manual"].fillna("").astype(str)
 
-    # Proses baris yang kosong ATAU masih ERROR
     mask_belum = (df["target_summary_manual"].str.strip() == "") | \
                  (df["target_summary_manual"].str.startswith("[ERROR:"))
     indeks_belum = df[mask_belum].index.tolist()
@@ -112,7 +197,7 @@ def main():
 
         print(f"[{i}/{len(indeks_belum)}] Memproses: {dokumen_asal} (baris {idx})...")
 
-        ringkasan = ringkas_satu_baris(client, transkrip, dokumen_asal)
+        ringkasan = ringkas_satu_baris(pool, transkrip, dokumen_asal)
         df.at[idx, "target_summary_manual"] = ringkasan
 
         print(f"  ✓ {len(ringkasan.split())} kata → {ringkasan[:80]}...")

@@ -35,17 +35,24 @@ _PATTERN_KATA_KASAR = re.compile(
 )
 
 
-def filter_kata_kasar(teks: str, pengganti: str = "***") -> str:
+def filter_kata_kasar(teks: str, pengganti: str = "***", hapus: bool = False) -> str:
     """
-    Ganti kata kasar dalam teks dengan karakter pengganti.
+    Ganti atau hapus kata kasar dalam teks.
 
     Parameter:
         teks      : Teks input yang akan difilter.
         pengganti : String pengganti kata kasar. Default '***'.
+        hapus     : Jika True, kata kasar dihapus total (bukan diganti '***').
+                    Cocok untuk data latih agar tidak ada artefak '***'.
 
     Return:
         Teks yang sudah difilter.
     """
+    if hapus:
+        # Hapus kata kasar beserta spasi berlebih yang tersisa
+        teks = _PATTERN_KATA_KASAR.sub("", teks)
+        teks = re.sub(r"  +", " ", teks)  # normalkan spasi ganda
+        return teks
     return _PATTERN_KATA_KASAR.sub(pengganti, teks)
 
 
@@ -86,19 +93,21 @@ def normalisasi_teks(teks: str) -> str:
     return "\n".join(hasil).strip()
 
 
-def filter_teks(teks: str) -> str:
+def filter_teks(teks: str, hapus: bool = False) -> str:
     """
     Pipeline pembersihan teks lengkap:
       1. Filter kata kasar
       2. Normalisasi teks
 
     Parameter:
-        teks : Teks transkripsi mentah dari Whisper.
+        teks  : Teks transkripsi mentah dari Whisper.
+        hapus : Jika True, kata kasar dihapus total (untuk data latih).
+                Jika False, diganti '***' (untuk tampilan UI).
 
     Return:
         Teks yang sudah bersih dan siap untuk summarization.
     """
-    teks = filter_kata_kasar(teks)
+    teks = filter_kata_kasar(teks, hapus=hapus)
     teks = normalisasi_teks(teks)
     return teks
 

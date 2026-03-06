@@ -9,11 +9,11 @@ Skrip batch untuk transkripsi otomatis semua file audio rapat:
   - Nama file output sama dengan nama file input (tanpa ekstensi)
 
 Cara pakai (training — WAV saja):
-    .\.venv\Scripts\Activate.ps1
+    .\\.venv\\Scripts\\Activate.ps1
     python batch_transcribe.py
 
 Atau langsung tanpa aktivasi:
-    .\.venv\Scripts\python.exe batch_transcribe.py
+    .\\.venv\\Scripts\\python.exe batch_transcribe.py
 """
 
 import sys
@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT))
 
 from modules.transcriber import transcribe_audio, WHISPER_MODEL, WHISPER_LANGUAGE
 from modules.audio_utils import extract_audio_from_video
+from modules.filter_kata import filter_teks
 
 # ── Konfigurasi path ─────────────────────────────────────────
 DIR_MP4         = ROOT / "dataset" / "01_raw" / "video_mp4"
@@ -126,6 +127,7 @@ def main() -> None:
 
         try:
             teks, waktu = transkripsi_satu_file(audio_path, fmt)
+            teks = filter_teks(teks, hapus=True)  # Hapus kata kasar dari transkrip
             out_path.write_text(teks, encoding="utf-8")
             kata_count = len(teks.split())
             print(f"     ✅ Selesai dalam {waktu}s | {kata_count} kata → {out_path.name}\n")
