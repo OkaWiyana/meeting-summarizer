@@ -44,8 +44,8 @@ def _get_model(model_name: str) -> whisper.Whisper:
 
 def transcribe_audio(
     audio_path: Path,
-    model_name: str = "medium",
-    language: str = "id",
+    model_name: str = WHISPER_MODEL,
+    language: str = WHISPER_LANGUAGE,
     task: str = "transcribe",
     progress_callback: Optional[Callable[[float], None]] = None,
 ) -> str:
@@ -78,17 +78,17 @@ def transcribe_audio(
 
         # ── Intercept tqdm Whisper untuk progress bar Streamlit ──
         if progress_callback is not None:
-            import whisper.transcribe as _wt
+            import tqdm as _tqdm_module
             from tqdm import tqdm as _orig_tqdm
 
             class _StreamlitTqdm(_orig_tqdm):
-                """tqdm pengganti yang memanggil progress_callback setiap update."""
                 def update(self, n: int = 1) -> None:
                     super().update(n)
                     if self.total and self.total > 0:
                         progress_callback(min(self.n / self.total, 1.0))
 
-            _wt.tqdm = _StreamlitTqdm
+            _tqdm_module.tqdm = _StreamlitTqdm
+
             try:
                 result = model.transcribe(
                     str(audio_path),
@@ -97,7 +97,7 @@ def transcribe_audio(
                     verbose=False,
                 )
             finally:
-                _wt.tqdm = _orig_tqdm  # Selalu kembalikan tqdm asli
+                _tqdm_module.tqdm = _orig_tqdm
         else:
             result = model.transcribe(
                 str(audio_path),

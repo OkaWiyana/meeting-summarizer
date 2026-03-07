@@ -15,19 +15,17 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import torch
 
 
-# ── Konfigurasi sistem (Disesuaikan dengan Training EXP-013) ─────────
+# ── Konfigurasi sistem  ─────────
 MODEL_LOCAL_PATH   = Path("models/indot5_finetuned")
 MODEL_HUB_FALLBACK = "Wikidepia/IndoT5-base"
 
 # Batas token input maksimal (Sesuai Training)
 MAX_INPUT_TOKENS  = 512   
-# Panjang ringkasan per chunk (Disesuaikan agar tidak halusinasi)
-MAX_NEW_TOKENS    = 150   
+# Panjang ringkasan per chunk
+MAX_NEW_TOKENS    = 100   
 MIN_NEW_TOKENS    = 20
 NUM_BEAMS         = 4
-# PERBAIKAN FATAL: Prefix harus sama persis dengan saat training!
-PREFIX_TASK       = "summarize: " 
-# PERBAIKAN: Penalti agar model tidak mengulang kalimat
+PREFIX_TASK       = "ringkas: " 
 REP_PENALTY       = 2.0   
 
 # Ukuran chunk dalam kata
@@ -85,7 +83,7 @@ def _ringkas_satu_chunk(teks_chunk: str, tokenizer, model, device) -> str:
             max_new_tokens=MAX_NEW_TOKENS,
             min_length=MIN_NEW_TOKENS,
             num_beams=NUM_BEAMS,
-            repetition_penalty=REP_PENALTY, # PERBAIKAN: Masuk sini
+            repetition_penalty=REP_PENALTY,
             early_stopping=True,
             no_repeat_ngram_size=3,
         )
@@ -101,49 +99,42 @@ def _ringkas_satu_chunk(teks_chunk: str, tokenizer, model, device) -> str:
 
 
 def summarize_text(teks: str) -> str:
-    """
-    Ringkas teks menggunakan IndoT5 fine-tuned.
-    Chunking otomatis: Teks dipecah menjadi chunk (≤ 300 kata), diringkas, 
-    lalu digabung.
-    """
     if not teks or not teks.strip():
         return ""
 
     tokenizer, model = _load_model(MODEL_LOCAL_PATH)
     device = next(model.parameters()).device
 
-    # ── Chunking per kalimat utuh (sama seperti notebook 01) ────
-    # Split di batas kalimat agar konteks tidak terpotong
-    kalimat_list = re.split(r'(?<=[.!?]) +', teks.strip())
-    
+    teks = teks.lower()
+    teks = re.sub(r'^[^\w\s]+', '', teks)
+    teks = re.sub(r'[^\x00-\x7F\u00C0-\u024F\s]', ' ', teks)
+    teks = re.sub(r'[^\w\s.,!?-]', ' ', teks)
+    teks = re.sub(r'\s+([.,!?])', r'\1', teks)
+    teks = re.sub(r'(\d)\s*\.\s*(\d)', r'\1,\2', teks)
+    teks = re.sub(r'\b(\w+)\s+\1\b', r'\1', teks)
+    teks = re.sub(r'\s+', ' ', teks).strip()
+
+    kalimat_list = re.split(r'(?<=[.!?]) +', teks)
     potongan = []
     chunk_saat_ini = []
     jumlah_kata_saat_ini = 0
-    
+
     for kalimat in kalimat_list:
         jml_kata = len(kalimat.split())
-        
-        if jumlah_kata_saat_ini + jml_kata > CHUNK_SIZE_WORDS and jumlah_kata_saat_ini > 0:
+        if jumlah_kata_saat_ini + jml_kata > 350 and jumlah_kata_saat_ini > 0:
             potongan.append(" ".join(chunk_saat_ini))
             chunk_saat_ini = [kalimat]
             jumlah_kata_saat_ini = jml_kata
         else:
             chunk_saat_ini.append(kalimat)
             jumlah_kata_saat_ini += jml_kata
-    
-    if chunk_saat_ini:
+
+    if chunk_saat_ini and jumlah_kata_saat_ini > 50:
         potongan.append(" ".join(chunk_saat_ini))
 
-    # Ringkas tiap chunk
     ringkasan_chunks = [
         _ringkas_satu_chunk(p, tokenizer, model, device)
         for p in potongan
     ]
 
-    # Gabungkan ringkasan semua chunk menjadi hasil akhir
-    gabungan = " ".join(ringkasan_chunks)
-
-    # PERBAIKAN: Hapus blok rekursif "ringkas gabungan lagi" karena 
-    # berpotensi merusak konteks hasil T5 yang sudah bagus.
-    
-    return gabungan.strip()
+    return " ".join(ringkasan_chunks).strip()
