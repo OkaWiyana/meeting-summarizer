@@ -8,7 +8,7 @@ Jika model lokal tidak tersedia, fallback ke model IndoT5 dari HuggingFace Hub.
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
 import re
 
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
@@ -98,7 +98,11 @@ def _ringkas_satu_chunk(teks_chunk: str, tokenizer, model, device) -> str:
     return hasil.strip()
 
 
-def summarize_text(teks: str) -> str:
+def summarize_text(teks: str, progress_callback: Optional[Callable[[float], None]] = None) -> str:
+    """
+    Meringkas teks penuh dengan memecahnya menjadi beberapa chunk.
+    Menerima progress_callback opsional untuk mengupdate UI Streamlit.
+    """
     if not teks or not teks.strip():
         return ""
 
@@ -132,9 +136,16 @@ def summarize_text(teks: str) -> str:
     if chunk_saat_ini and jumlah_kata_saat_ini > 50:
         potongan.append(" ".join(chunk_saat_ini))
 
-    ringkasan_chunks = [
-        _ringkas_satu_chunk(p, tokenizer, model, device)
-        for p in potongan
-    ]
+    ringkasan_chunks = []
+    total_chunks = len(potongan)
+
+    # Looping satu per satu chunk agar bisa mengirim progress bar
+    for i, p in enumerate(potongan):
+        hasil_chunk = _ringkas_satu_chunk(p, tokenizer, model, device)
+        ringkasan_chunks.append(hasil_chunk)
+        
+        # Panggil callback untuk update UI jika ada
+        if progress_callback is not None and total_chunks > 0:
+            progress_callback((i + 1) / total_chunks)
 
     return " ".join(ringkasan_chunks).strip()

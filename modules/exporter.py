@@ -12,29 +12,54 @@ from datetime import datetime
 from fpdf import FPDF
 
 
+def _sanitize_for_pdf(text: str) -> str:
+    """
+    Mengamankan teks dari karakter Unicode yang tidak didukung oleh
+    font standar FPDF (Helvetica/Arial) agar tidak crash.
+    Karakter yang tidak didukung akan diubah menjadi tanda tanya (?).
+    """
+    if not text:
+        return ""
+    # Ganti smart quotes yang sering bikin crash
+    text = text.replace('“', '"').replace('”', '"').replace("‘", "'").replace("’", "'")
+    text = text.replace('—', '-').replace('–', '-')
+    # Force encode ke latin-1
+    return text.encode('latin-1', 'replace').decode('latin-1')
+
+
 class _PDFRingkasan(FPDF):
     """Subclass FPDF dengan header dan footer kustom untuk laporan ringkasan."""
 
     def header(self) -> None:
-        self.set_font("Helvetica", "B", 14)
-        self.cell(0, 10, "LAPORAN RINGKASAN RAPAT", align="C", new_x="LMARGIN", new_y="NEXT")
-        self.set_font("Helvetica", size=9)
+        # Judul Laporan
+        self.set_font("Helvetica", "B", 16)
+        self.set_text_color(40, 40, 40)
+        self.cell(0, 8, "LAPORAN RINGKASAN RAPAT", align="C", new_x="LMARGIN", new_y="NEXT")
+        
+        # Tanggal Dibuat
+        self.set_font("Helvetica", size=10)
+        self.set_text_color(100, 100, 100)
         self.cell(
             0, 6,
-            f"Dibuat: {datetime.now().strftime('%d %B %Y, %H:%M')}",
+            f"Di-generate otomatis pada: {datetime.now().strftime('%d %B %Y, %H:%M')}",
             align="C",
             new_x="LMARGIN", new_y="NEXT",
         )
-        self.ln(2)
-        self.set_draw_color(100, 100, 100)
-        self.set_line_width(0.3)
+        self.ln(3)
+        
+        # Garis pemisah header
+        self.set_draw_color(200, 200, 200)
+        self.set_line_width(0.5)
         self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
-        self.ln(4)
+        self.ln(6)
 
     def footer(self) -> None:
         self.set_y(-15)
         self.set_font("Helvetica", "I", 8)
         self.set_text_color(150, 150, 150)
+        # Garis pemisah footer
+        self.set_draw_color(220, 220, 220)
+        self.line(self.l_margin, self.get_y() - 2, self.w - self.r_margin, self.get_y() - 2)
         self.cell(0, 10, f"Halaman {self.page_no()}", align="C")
 
 
@@ -45,45 +70,42 @@ def export_to_pdf(
 ) -> Path:
     """
     Ekspor ringkasan dan transkripsi ke file PDF.
-
-    Parameter:
-        ringkasan    : Teks ringkasan hasil model.
-        transkripsi  : Teks transkripsi yang sudah dibersihkan.
-        output_path  : Path lengkap file PDF output.
-
-    Return:
-        Path ke file PDF yang berhasil dibuat.
     """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     pdf = _PDFRingkasan()
-    pdf.set_margins(left=20, top=20, right=20)
+    # Menambah margin agar dokumen tidak terlalu sesak
+    pdf.set_margins(left=25, top=20, right=25)
     pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=20)
 
     # ── Bagian Ringkasan ─────────────────────────────────────
     pdf.set_font("Helvetica", "B", 12)
-    pdf.set_fill_color(230, 240, 255)
-    pdf.cell(0, 8, "RINGKASAN", fill=True, new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(2)
+    pdf.set_text_color(40, 40, 40)
+    pdf.set_fill_color(235, 245, 255) # Biru korporat sangat muda
+    pdf.cell(0, 8, " RINGKASAN UTAMA", fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
 
     pdf.set_font("Helvetica", size=11)
-    pdf.multi_cell(0, 6, ringkasan or "(Tidak ada ringkasan)")
-    pdf.ln(6)
-
-    # ── Garis pemisah ────────────────────────────────────────
-    pdf.set_draw_color(180, 180, 180)
-    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
-    pdf.ln(4)
+    pdf.set_text_color(50, 50, 50)
+    # Gunakan sanitasi di sini
+    teks_ringkasan = _sanitize_for_pdf(ringkasan or "(Tidak ada ringkasan)")
+    pdf.multi_cell(0, 6.5, teks_ringkasan) 
+    pdf.ln(8)
 
     # ── Bagian Transkripsi ───────────────────────────────────
     pdf.set_font("Helvetica", "B", 12)
-    pdf.set_fill_color(240, 240, 240)
-    pdf.cell(0, 8, "TRANSKRIPSI LENGKAP", fill=True, new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(2)
+    pdf.set_text_color(40, 40, 40)
+    pdf.set_fill_color(245, 245, 245) # Abu-abu sangat muda
+    pdf.cell(0, 8, " TRANSKRIPSI LENGKAP", fill=True, new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
 
     pdf.set_font("Helvetica", size=10)
-    pdf.multi_cell(0, 5, transkripsi or "(Tidak ada transkripsi)")
+    pdf.set_text_color(70, 70, 70)
+    # Gunakan sanitasi di sini
+    teks_transkripsi = _sanitize_for_pdf(transkripsi or "(Tidak ada transkripsi)")
+    pdf.multi_cell(0, 5.5, teks_transkripsi)
 
     pdf.output(str(output_path))
     return output_path
@@ -96,14 +118,6 @@ def export_to_txt(
 ) -> Path:
     """
     Ekspor ringkasan dan transkripsi ke file plain text (.txt).
-
-    Parameter:
-        ringkasan    : Teks ringkasan hasil model.
-        transkripsi  : Teks transkripsi yang sudah dibersihkan.
-        output_path  : Path lengkap file TXT output.
-
-    Return:
-        Path ke file TXT yang berhasil dibuat.
     """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -111,14 +125,14 @@ def export_to_txt(
     timestamp = datetime.now().strftime("%d %B %Y, %H:%M")
     konten = (
         f"LAPORAN RINGKASAN RAPAT\n"
-        f"Dibuat: {timestamp}\n"
-        f"{'=' * 60}\n\n"
-        f"RINGKASAN\n"
-        f"{'-' * 40}\n"
-        f"{ringkasan or '(Tidak ada ringkasan)'}\n\n"
-        f"{'=' * 60}\n\n"
-        f"TRANSKRIPSI LENGKAP\n"
-        f"{'-' * 40}\n"
+        f"Di-generate otomatis pada: {timestamp}\n"
+        f"{'=' * 65}\n\n"
+        f"[ RINGKASAN UTAMA ]\n"
+        f"{'-' * 65}\n"
+        f"{ringkasan or '(Tidak ada ringkasan)'}\n\n\n"
+        f"{'=' * 65}\n\n"
+        f"[ TRANSKRIPSI LENGKAP ]\n"
+        f"{'-' * 65}\n"
         f"{transkripsi or '(Tidak ada transkripsi)'}\n"
     )
 

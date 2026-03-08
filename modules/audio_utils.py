@@ -10,6 +10,43 @@ from pathlib import Path
 import subprocess
 
 
+def get_media_duration(file_path: Path) -> float:
+    """
+    Mendapatkan durasi file media (audio/video) dalam detik menggunakan ffprobe.
+
+    Parameter:
+        file_path : Path ke file media.
+
+    Return:
+        Durasi dalam detik (float).
+
+    Raises:
+        RuntimeError : Jika ffprobe gagal membaca durasi.
+    """
+    file_path = Path(file_path)
+    command = [
+        "ffprobe",
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        str(file_path),
+    ]
+    try:
+        result = subprocess.run(
+            command, check=True, capture_output=True, text=True,
+        )
+        return float(result.stdout.strip())
+    except (subprocess.CalledProcessError, ValueError) as e:
+        raise RuntimeError(
+            f"Gagal membaca durasi file: {file_path}\n{e}"
+        ) from e
+    except FileNotFoundError:
+        raise RuntimeError(
+            "ffprobe tidak ditemukan. Pastikan ffmpeg/ffprobe sudah terinstall "
+            "dan tersedia di PATH sistem."
+        )
+
+
 def extract_audio_from_video(video_path: Path, output_dir: Path) -> Path:
     """
     Ekstrak track audio dari file video MP4 menjadi file WAV.
