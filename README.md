@@ -99,7 +99,8 @@ meeting-summarizer/
 ├── notebooks/                      # Jupyter Notebooks untuk pipeline pelatihan
 │   ├── 01_data_cleaning.ipynb      # Pembersihan & pairing data
 │   ├── 02_finetuning_indot5.ipynb  # Fine-tuning model IndoT5
-│   └── 03_evaluation_rouge.ipynb   # Evaluasi model dengan skor ROUGE
+│   ├── 03_evaluation_rouge.ipynb   # Evaluasi model dengan skor ROUGE
+│   └── 04_end_to_end_test.ipynb    # Pengujian end-to-end pipeline sistem
 │
 ├── dataset/                        # Data untuk pelatihan model
 │   ├── 01_raw/                     # Data mentah
@@ -109,9 +110,11 @@ meeting-summarizer/
 │   │   └── risalah_pdf/            # Dokumen risalah rapat PDF (ground truth)
 │   ├── 02_extracted/               # Hasil ekstraksi (transkripsi Whisper & OCR)
 │   │   └── whisper_transcripts/    # Hasil transkripsi dari batch_transcribe.py
-│   └── 03_paired/                  # Dataset yang sudah dipasangkan
-│       ├── train.csv               # Data latih (pasangan transkripsi ↔ ringkasan)
-│       └── test.csv                # Data uji
+│   ├── 03_paired/                  # Dataset yang sudah dipasangkan
+│   │   ├── train.csv               # Data latih (pasangan transkripsi ↔ ringkasan)
+│   │   └── test.csv                # Data uji
+│   ├── data_segment_*.csv          # Data anotasi dan pembersihan teks
+│   └── *_end_to_end_*.csv          # Hasil evaluasi pengujian end-to-end (MP4/MP3/WAV)
 │
 ├── models/                         # Model machine learning
 │   └── indot5_finetuned/           # Model IndoT5 hasil fine-tuning
@@ -248,16 +251,17 @@ Modul `ocr_risalah.py` akan:
 - Mengkonversi halaman PDF ke gambar (menggunakan Poppler)
 - Menjalankan OCR pada setiap halaman (menggunakan Tesseract)
 - Membersihkan hasil OCR dari artefak
-- Mengekstrak bagian inti pembahasan rapat
+- Mengekstrak bagian inti pembahasan rapat untuk dijadikan referensi kosakata (vocabulary)
 
-#### 2c. Data Cleaning & Pairing
+#### 2c. Data Cleaning & Labeling
 
 Jalankan notebook `01_data_cleaning.ipynb` untuk:
 
-- Membersihkan teks transkripsi dan hasil OCR
-- Memasangkan transkripsi (input) dengan ringkasan risalah (target/ground truth)
-- Membagi dataset menjadi **train** dan **test** set
-- Menyimpan ke `dataset/03_paired/train.csv` dan `dataset/03_paired/test.csv`
+- Membersihkan teks transkripsi dari karakter rusak dan spasi berlebih
+- **OCR-guided Correction**: Menggunakan teks hasil OCR risalah sebagai _vocabulary_ lokal untuk mengoreksi otomatis _typo_ pada hasil transkripsi Whisper (menggunakan algoritma _fuzzy string matching_).
+- **Pembentukan Ground Truth**: Memasangkan teks transkripsi bersih (input) dengan ringkasan referensi (target/ground truth). Ground truth ini diambil/disusun dari **dokumen risalah rapat asli** hasil ekstraksi OCR.
+- Membagi dataset secara otomatis menjadi **train** (80%) dan **test** (20%) berdasar dokumen.
+- Menyimpan ke `dataset/03_paired/train.csv` dan `test.csv`
 
 **Output:** File `train.csv` dan `test.csv` berisi pasangan transkripsi ↔ ringkasan.
 
@@ -301,6 +305,22 @@ Jalankan notebook `03_evaluation_rouge.ipynb`:
 4. **Analisis Hasil** — Membandingkan ringkasan model vs ringkasan referensi
 
 **Output:** Laporan skor ROUGE yang menunjukkan performa model.
+
+---
+
+### Tahap 4b — Pengujian End-to-End
+
+**Tujuan:** Mengevaluasi kinerja sistem secara keseluruhan (waktu proses dan kualitas ringkasan) pada berbagai format input (MP4, MP3, WAV).
+
+**Langkah-langkah:**
+
+Jalankan notebook `04_end_to_end_test.ipynb`:
+
+1. **Simulasi Pipeline** — Menjalankan transkripsi, filter teks, dan ringkasan secara berurutan.
+2. **Uji Multi-Format** — Menguji input MP4, MP3, dan WAV untuk memastikan konsistensi output.
+3. **Analisa Waktu & ROUGE** — Menghitung ROUGE score dan waktu eksekusi masing-masing format.
+
+**Output:** Laporan dan grafik perbandingan waktu serta skor ROUGE (tersimpan di `dataset/`).
 
 ---
 
