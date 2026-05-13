@@ -6,7 +6,7 @@ Modul transkripsi audio menggunakan model Whisper (lokal / offline).
 Mendukung input:
   - WAV  (langsung diproses)
   - MP3  (langsung diproses)
-  - MP4  (sebaiknya ekstrak ke WAV dulu via audio_utils.py)
+  - MP4  (di ekstrak ke WAV dulu via audio_utils.py)
 """
 
 from pathlib import Path
@@ -15,30 +15,26 @@ from typing import Callable, Optional
 import whisper
 
 
-# ── Konfigurasi sistem (tidak diubah oleh pengguna) ──────────
-# Model Whisper yang digunakan: tiny | base | small | medium | large-v3
-# 'small' direkomendasikan untuk keseimbangan kecepatan & akurasi di CPU.
-# Ganti ke 'medium' jika menggunakan GPU.
+# Model Whisper : tiny | base | small | medium | large-v3
 WHISPER_MODEL    = "medium"
 WHISPER_LANGUAGE = "id"   # Bahasa Indonesia
-
-# ── Cache model ───────────────────────────────────────────────
 
 _loaded_models: dict = {}
 
 
 def _get_model(model_name: str) -> whisper.Whisper:
-    """
-    Load model Whisper dari cache atau dari disk jika belum di-load.
-
-    Parameter:
-        model_name : Nama model Whisper ('tiny','base','small','medium','large-v3').
-
-    Return:
-        Objek model Whisper yang sudah siap digunakan.
-    """
     if model_name not in _loaded_models:
-        _loaded_models[model_name] = whisper.load_model(model_name)
+        import time
+        from modules.performance import log_performance, get_ram_usage_mb, get_model_size_mb
+
+        t0 = time.time()
+        model = whisper.load_model(model_name)
+        elapsed = time.time() - t0
+        
+        _loaded_models[model_name] = model
+        size_mb = get_model_size_mb(model)
+        log_performance(f"[COLD START] Loaded Whisper '{model_name}' in {elapsed:.2f}s | Size: {size_mb:.2f} MB | System RAM: {get_ram_usage_mb():.2f} MB")
+        
     return _loaded_models[model_name]
 
 
@@ -57,9 +53,6 @@ def transcribe_audio(
         model_name        : Nama model Whisper yang digunakan. Default 'medium'.
         language          : Kode bahasa. Default 'id' (Bahasa Indonesia).
         task              : 'transcribe' atau 'translate'.
-        progress_callback : Opsional. Fungsi callable(float) yang dipanggil
-                            tiap tick progress dengan nilai 0.0–1.0.
-                            Digunakan untuk mengupdate st.progress() di Streamlit.
 
     Return:
         String teks hasil transkripsi.
@@ -120,13 +113,6 @@ def transcribe_with_timestamps(
     model_name: str = "medium",
     language: str = "id",
 ) -> list[dict]:
-    """
-    Transkripsi audio dengan informasi timestamp per segmen.
-
-    Return:
-        List of dict dengan key: 'start', 'end', 'text'.
-        Contoh: [{'start': 0.0, 'end': 3.5, 'text': 'Rapat dimulai...'}, ...]
-    """
     audio_path = Path(audio_path)
 
     if not audio_path.exists():

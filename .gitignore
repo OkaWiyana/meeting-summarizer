@@ -55,6 +55,11 @@ Thumbs.db
 *.log
 logs/
 
+
 # --- Secrets ---
 *.env
 secrets.toml
+
+# --- Agent Docs ---
+agent.md
+agen.md

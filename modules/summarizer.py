@@ -15,7 +15,7 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import torch
 
 
-# ── Konfigurasi sistem  ─────────
+# Konfigurasi Sistem memamngil model IndoT5 default langsung ke huging face
 MODEL_LOCAL_PATH   = Path("models/indot5_finetuned")
 MODEL_HUB_FALLBACK = "Wikidepia/IndoT5-base"
 
@@ -31,7 +31,6 @@ REP_PENALTY       = 2.0
 # Ukuran chunk dalam kata
 CHUNK_SIZE_WORDS  = 300
 
-# ── Cache agar model tidak di-load ulang ─────────────────────
 _tokenizer: Optional[AutoTokenizer] = None
 _model: Optional[AutoModelForSeq2SeqLM] = None
 
@@ -52,6 +51,11 @@ def _load_model(model_path: Optional[Path] = None) -> tuple:
     else:
         source = MODEL_HUB_FALLBACK
 
+    import time
+    from modules.performance import log_performance, get_ram_usage_mb, get_model_size_mb
+
+    t0 = time.time()
+
     _tokenizer = AutoTokenizer.from_pretrained(source)
     _model = AutoModelForSeq2SeqLM.from_pretrained(source)
 
@@ -60,14 +64,14 @@ def _load_model(model_path: Optional[Path] = None) -> tuple:
     _model = _model.to(device)
     _model.eval()
 
+    elapsed = time.time() - t0
+    size_mb = get_model_size_mb(_model)
+    log_performance(f"[COLD START] Loaded IndoT5 from '{source}' in {elapsed:.2f}s | Size: {size_mb:.2f} MB | System RAM: {get_ram_usage_mb():.2f} MB")
+
     return _tokenizer, _model
 
 
 def _ringkas_satu_chunk(teks_chunk: str, tokenizer, model, device) -> str:
-    """
-    Ringkas satu potongan teks menggunakan IndoT5 dengan parameter yang
-    SUDAH DISAMAKAN dengan pengujian evaluasi ROUGE.
-    """
     input_text = PREFIX_TASK + teks_chunk
     inputs = tokenizer(
         input_text,
@@ -99,10 +103,6 @@ def _ringkas_satu_chunk(teks_chunk: str, tokenizer, model, device) -> str:
 
 
 def summarize_text(teks: str, progress_callback: Optional[Callable[[float], None]] = None) -> str:
-    """
-    Meringkas teks penuh dengan memecahnya menjadi beberapa chunk.
-    Menerima progress_callback opsional untuk mengupdate UI Streamlit.
-    """
     if not teks or not teks.strip():
         return ""
 
